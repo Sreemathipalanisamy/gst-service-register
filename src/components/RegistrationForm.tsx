@@ -13,6 +13,7 @@ interface FormErrors {
   turnover?: string;
   state?: string;
   itc?: string;
+  general?: string;
 }
 
 export const RegistrationForm: React.FC = () => {
@@ -83,14 +84,28 @@ export const RegistrationForm: React.FC = () => {
     setLoading(true);
     
     try {
-      // Store registration data in localStorage for demo purposes
-      localStorage.setItem('gstRegistration', JSON.stringify(formData));
+      // Check if GSTIN already exists
+      const existingRegistrations = JSON.parse(localStorage.getItem('gstRegistrations') || '{}');
+      
+      if (existingRegistrations[formData.gstin!]) {
+        setErrors({ general: 'This GSTIN is already registered. Please use a different GSTIN or login with existing credentials.' });
+        setLoading(false);
+        return;
+      }
+      
+      // Store registration data with GSTIN as key
+      existingRegistrations[formData.gstin!] = {
+        ...formData,
+        created_at: new Date().toISOString()
+      };
+      localStorage.setItem('gstRegistrations', JSON.stringify(existingRegistrations));
       localStorage.setItem('currentGSTIN', formData.gstin!);
       
       // Navigate to invoice page
       navigate('/invoice');
     } catch (error) {
       console.error('Registration failed:', error);
+      setErrors({ general: 'Registration failed. Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -178,6 +193,12 @@ export const RegistrationForm: React.FC = () => {
               error={errors.itc}
             />
           </div>
+
+          {errors.general && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3">
+              <p className="text-sm text-red-600">{errors.general}</p>
+            </div>
+          )}
 
           <div className="pt-6">
             <Button
