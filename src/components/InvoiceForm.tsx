@@ -7,15 +7,16 @@ import { ProductForm } from './ProductForm';
 import { INDIAN_STATES, INVOICE_STATUS, PAYMENT_STATUS } from '../data/constants';
 import { Invoice, Product, GSTRegistration } from '../types';
 import { calculateInvoiceTotals, formatCurrency } from '../utils/calculations';
-import { Plus, Trash2, LogOut } from 'lucide-react';
+import { Plus, Trash2, LogOut, Eye, Save } from 'lucide-react';
 
 export const InvoiceForm: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
-  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [showExistingInvoices, setShowExistingInvoices] = useState(false);
   const [existingInvoices, setExistingInvoices] = useState<any[]>([]);
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
+  const [currentInvoiceId, setCurrentInvoiceId] = useState<string>('');
+  const [isInvoiceCreated, setIsInvoiceCreated] = useState(false);
   const [registration, setRegistration] = useState<GSTRegistration | null>(null);
   
   const [invoice, setInvoice] = useState<Partial<Invoice>>({
@@ -70,13 +71,11 @@ export const InvoiceForm: React.FC = () => {
     }));
   }, [navigate]);
 
-  const handleSelectInvoice = (invoiceId: string) => {
-    const selectedInv = existingInvoices.find(inv => inv.invoice_id === invoiceId);
-    if (selectedInv) {
-      setInvoice(selectedInv);
-      setSelectedInvoiceId(invoiceId);
-      setShowInvoiceForm(false);
-    }
+  const handleSelectExistingInvoice = (selectedInvoice: any) => {
+    setInvoice(selectedInvoice);
+    setCurrentInvoiceId(selectedInvoice.invoice_id);
+    setIsInvoiceCreated(true);
+    setShowExistingInvoices(false);
   };
 
   const handleCreateNewInvoice = () => {
@@ -97,19 +96,10 @@ export const InvoiceForm: React.FC = () => {
       itc: registration?.itc || '',
       state: registration?.state || ''
     });
-    setSelectedInvoiceId('');
-    setShowInvoiceForm(false);
+    setCurrentInvoiceId('');
+    setIsInvoiceCreated(false);
+    setShowExistingInvoices(false);
   };
-
-  const handleAddNewInvoice = () => {
-    setShowInvoiceForm(true);
-  };
-
-  const canAddProducts = () => {
-    return invoice.invoice_id && invoice.invoice_id.trim() !== '';
-  };
-
-  const isNewInvoice = !selectedInvoiceId;
 
   useEffect(() => {
     if (invoice.products && invoice.products.length > 0 && registration) {
@@ -127,8 +117,8 @@ export const InvoiceForm: React.FC = () => {
   }, [invoice.products, invoice.state, registration]);
 
   const handleAddProduct = (product: Product) => {
-    if (!canAddProducts()) {
-      alert('Please create an invoice first before adding products.');
+    if (!isInvoiceCreated) {
+      alert('Please create/save the invoice first before adding products.');
       return;
     }
     
@@ -146,7 +136,7 @@ export const InvoiceForm: React.FC = () => {
     }));
   };
 
-  const validateForm = (): boolean => {
+  const validateInvoiceForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (!invoice.invoice_id) newErrors.invoice_id = 'Invoice ID is required';
@@ -154,46 +144,68 @@ export const InvoiceForm: React.FC = () => {
     if (!invoice.status) newErrors.status = 'Status is required';
     if (!invoice.payment_status) newErrors.payment_status = 'Payment status is required';
     if (!invoice.state) newErrors.state = 'State is required';
-    if (!invoice.products || invoice.products.length === 0) {
-      newErrors.products = 'At least one product is required';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateInvoiceForm()) {
+      return;
+    }
+
+    // Check if invoice ID already exists
+    const allInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+    const existingInvoice = allInvoices.find((inv: any) => 
+      inv.invoice_id === invoice.invoice_id && inv.gstin === invoice.gstin
+    );
+
+    if (existingInvoice && !currentInvoiceId) {
+      setErrors({ invoice_id: 'Invoice ID already exists for this GSTIN' });
       return;
     }
 
     setLoading(true);
     
     try {
-      // Store invoice data (demo purposes)
+      setCurrentInvoiceId(invoice.invoice_id || '');
+      setIsInvoiceCreated(true);
+      alert('Invoice created successfully! You can now add products.');
+    } catch (error) {
+      console.error('Failed to create invoice:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveInvoice = async () => {
+    setLoading(true);
+    
+    try {
       const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
       
-      if (isNewInvoice) {
+      const existingIndex = invoices.findIndex((inv: any) => 
+        inv.invoice_id === invoice.invoice_id && inv.gstin === invoice.gstin
+      );
+
+      if (existingIndex !== -1) {
+        // Update existing invoice
+        invoices[existingIndex] = {
+          ...invoices[existingIndex],
+          ...invoice,
+          updated_at: new Date().toISOString()
+        };
+        alert('Invoice updated successfully!');
+      } else {
         // Create new invoice
         invoices.push({
           ...invoice,
           id: Date.now().toString(),
           created_at: new Date().toISOString()
         });
-        alert('Invoice created successfully!');
-      } else {
-        // Update existing invoice
-        const invoiceIndex = invoices.findIndex((inv: any) => inv.invoice_id === invoice.invoice_id);
-        if (invoiceIndex !== -1) {
-          invoices[invoiceIndex] = {
-            ...invoices[invoiceIndex],
-            ...invoice,
-            updated_at: new Date().toISOString()
-          };
-        }
-        alert('Invoice updated successfully!');
+        alert('Invoice saved successfully!');
       }
       
       localStorage.setItem('invoices', JSON.stringify(invoices));
@@ -204,28 +216,9 @@ export const InvoiceForm: React.FC = () => {
       const gstinInvoices = updatedInvoices.filter((inv: any) => inv.gstin === currentGSTIN);
       setExistingInvoices(gstinInvoices);
       
-      if (isNewInvoice) {
-        // Reset form for new invoice
-        setInvoice(prev => ({
-          invoice_id: '',
-          date: new Date().toISOString().split('T')[0],
-          status: 'Draft',
-          payment_status: 'Pending',
-          products: [],
-          buying_price: 0,
-          amount: 0,
-          amount_paid: 0,
-          cgst: 0,
-          sgst: 0,
-          igst: 0,
-          net_amount: 0,
-          gstin: prev.gstin,
-          itc: prev.itc,
-          state: prev.state
-        }));
-      }
     } catch (error) {
       console.error('Failed to save invoice:', error);
+      alert('Failed to save invoice. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -263,12 +256,16 @@ export const InvoiceForm: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Invoice Management</h1>
               <p className="text-gray-600">GSTIN: {registration.gstin} | {registration.vendor_type}</p>
-              {selectedInvoiceId && (
-                <p className="text-sm text-blue-600">Currently editing: {selectedInvoiceId}</p>
+              {currentInvoiceId && (
+                <p className="text-sm text-blue-600">Current Invoice: {currentInvoiceId}</p>
               )}
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" onClick={handleAddNewInvoice}>
+              <Button variant="secondary" onClick={() => setShowExistingInvoices(true)}>
+                <Eye className="w-4 h-4 mr-2" />
+                View Existing Invoices
+              </Button>
+              <Button variant="secondary" onClick={handleCreateNewInvoice}>
                 Add Invoice
               </Button>
               <Button variant="secondary" onClick={handleLogout}>
@@ -279,69 +276,74 @@ export const InvoiceForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Existing Invoices Selection */}
-        {existingInvoices.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Your Invoices</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {existingInvoices.map((inv, index) => (
-                <div
-                  key={index}
-                  className={`border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
-                    selectedInvoiceId === inv.invoice_id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  onClick={() => handleSelectInvoice(inv.invoice_id)}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-medium text-gray-900">{inv.invoice_id}</h3>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      inv.status === 'Approved' ? 'bg-green-100 text-green-800' :
-                      inv.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                      inv.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {inv.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-1">
-                    {new Date(inv.date).toLocaleDateString()}
-                  </p>
-                  <p className="text-sm font-medium">
-                    ₹{inv.net_amount?.toLocaleString('en-IN')} | {inv.products?.length || 0} products
-                  </p>
+        {/* Existing Invoices Modal */}
+        {showExistingInvoices && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Existing Invoices</h2>
+                <Button variant="secondary" onClick={() => setShowExistingInvoices(false)}>
+                  Close
+                </Button>
+              </div>
+              
+              {existingInvoices.length > 0 ? (
+                <div className="space-y-4">
+                  {existingInvoices.map((inv, index) => (
+                    <div
+                      key={index}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
+                      onClick={() => handleSelectExistingInvoice(inv)}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{inv.invoice_id}</h3>
+                          <p className="text-sm text-gray-600">
+                            Date: {new Date(inv.date).toLocaleDateString()} | Status: {inv.status}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-lg">₹{inv.net_amount?.toLocaleString('en-IN')}</p>
+                          <p className="text-sm text-gray-600">{inv.products?.length || 0} products</p>
+                        </div>
+                      </div>
+                      
+                      {inv.products && inv.products.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-sm font-medium text-gray-700 mb-2">Products:</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {inv.products.map((product: any, pIndex: number) => (
+                              <div key={pIndex} className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                <div className="font-medium">{product.product_name}</div>
+                                <div>SKU: {product.sku} | Qty: {product.quantity} × ₹{product.unit_price}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="mt-4">
-              <Button onClick={handleCreateNewInvoice} variant="secondary">
-                Create New Invoice
-              </Button>
+              ) : (
+                <p className="text-gray-600 text-center py-8">No existing invoices found.</p>
+              )}
             </div>
           </div>
         )}
 
-        {showInvoiceForm && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Create New Invoice</h2>
-              <Button variant="secondary" onClick={() => setShowInvoiceForm(false)}>
-                Cancel
+        {/* Invoice Details Section */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Invoice Details</h2>
+            {isInvoiceCreated && (
+              <Button onClick={handleSaveInvoice} loading={loading}>
+                <Save className="w-4 h-4 mr-2" />
+                Save Invoice
               </Button>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Fill in the invoice details below to create a new invoice. You can add products after creating the invoice.
-            </p>
+            )}
           </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Invoice Details */}
-          {(showInvoiceForm || selectedInvoiceId || existingInvoices.length === 0) && (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Invoice Details</h2>
-            
+          
+          <form onSubmit={handleCreateInvoice} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Input
                 label="Invoice ID"
@@ -349,6 +351,7 @@ export const InvoiceForm: React.FC = () => {
                 onChange={(e) => handleInputChange('invoice_id', e.target.value)}
                 placeholder="INV-001"
                 error={errors.invoice_id}
+                disabled={isInvoiceCreated}
               />
 
               <Input
@@ -395,7 +398,7 @@ export const InvoiceForm: React.FC = () => {
             </div>
 
             {/* Auto-filled fields */}
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+            <div className="p-4 bg-blue-50 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">Auto-filled Information</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
@@ -408,37 +411,38 @@ export const InvoiceForm: React.FC = () => {
                 </div>
               </div>
             </div>
-            </div>
-          )}
 
-          {/* Products Section */}
-          {(selectedInvoiceId || (invoice.invoice_id && invoice.invoice_id.trim() !== '')) && (
-            <div className="bg-white rounded-lg shadow-sm p-6">
+            {!isInvoiceCreated && (
+              <div className="pt-4">
+                <Button
+                  type="submit"
+                  loading={loading}
+                  className="w-full md:w-auto"
+                  size="lg"
+                >
+                  {loading ? 'Creating Invoice...' : 'Create Invoice'}
+                </Button>
+              </div>
+            )}
+          </form>
+        </div>
+
+        {/* Products Section - Only show when invoice is created */}
+        {isInvoiceCreated && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Products</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Products for Invoice: {currentInvoiceId}
+              </h2>
               <Button
                 type="button"
                 onClick={() => setShowProductForm(true)}
-                disabled={showProductForm || !canAddProducts()}
+                disabled={showProductForm}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Product
               </Button>
             </div>
-
-            {!canAddProducts() && (
-              <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-md p-3">
-                <p className="text-sm text-yellow-700">
-                  Please create an invoice first before adding products.
-                </p>
-              </div>
-            )}
-
-            {errors.products && (
-              <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm text-red-600">{errors.products}</p>
-              </div>
-            )}
 
             {showProductForm && (
               <div className="mb-6">
@@ -449,11 +453,12 @@ export const InvoiceForm: React.FC = () => {
               </div>
             )}
 
-            {/* Products List */}
+            {/* Existing Products List */}
             {invoice.products && invoice.products.length > 0 && (
-              <div className="space-y-4">
+              <div className="space-y-4 mb-6">
+                <h3 className="text-lg font-medium text-gray-900">Added Products</h3>
                 {invoice.products.map((product, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
+                  <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <h4 className="font-medium text-gray-900">{product.product_name}</h4>
@@ -491,70 +496,66 @@ export const InvoiceForm: React.FC = () => {
                 ))}
               </div>
             )}
-            </div>
-          )}
 
-          {/* Invoice Summary */}
-          {invoice.products && invoice.products.length > 0 && canAddProducts() && (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Invoice Summary</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <span className="text-gray-600 text-sm">Total Buying Price</span>
-                  <p className="text-lg font-semibold">{formatCurrency(invoice.buying_price || 0)}</p>
+            {/* Invoice Summary - Only show when products exist */}
+            {invoice.products && invoice.products.length > 0 && (
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Summary</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <span className="text-gray-600 text-sm">Total Buying Price</span>
+                    <p className="text-lg font-semibold">{formatCurrency(invoice.buying_price || 0)}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <span className="text-gray-600 text-sm">Subtotal</span>
+                    <p className="text-lg font-semibold">{formatCurrency(invoice.amount || 0)}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <span className="text-gray-600 text-sm">
+                      {registration.state === invoice.state ? 'CGST + SGST' : 'IGST'}
+                    </span>
+                    <p className="text-lg font-semibold">
+                      {formatCurrency((invoice.cgst || 0) + (invoice.sgst || 0) + (invoice.igst || 0))}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <span className="text-blue-700 text-sm font-medium">Net Amount</span>
+                    <p className="text-xl font-bold text-blue-900">{formatCurrency(invoice.net_amount || 0)}</p>
+                  </div>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <span className="text-gray-600 text-sm">Subtotal</span>
-                  <p className="text-lg font-semibold">{formatCurrency(invoice.amount || 0)}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <span className="text-gray-600 text-sm">
-                    {registration.state === invoice.state ? 'CGST + SGST' : 'IGST'}
-                  </span>
-                  <p className="text-lg font-semibold">
-                    {formatCurrency((invoice.cgst || 0) + (invoice.sgst || 0) + (invoice.igst || 0))}
-                  </p>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <span className="text-blue-700 text-sm font-medium">Net Amount</span>
-                  <p className="text-xl font-bold text-blue-900">{formatCurrency(invoice.net_amount || 0)}</p>
+
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">CGST (9%):</span>
+                    <span className="ml-2 font-medium">{formatCurrency(invoice.cgst || 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">SGST (9%):</span>
+                    <span className="ml-2 font-medium">{formatCurrency(invoice.sgst || 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">IGST (18%):</span>
+                    <span className="ml-2 font-medium">{formatCurrency(invoice.igst || 0)}</span>
+                  </div>
                 </div>
               </div>
+            )}
+          </div>
+        )}
 
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">CGST (9%):</span>
-                  <span className="ml-2 font-medium">{formatCurrency(invoice.cgst || 0)}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">SGST (9%):</span>
-                  <span className="ml-2 font-medium">{formatCurrency(invoice.sgst || 0)}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">IGST (18%):</span>
-                  <span className="ml-2 font-medium">{formatCurrency(invoice.igst || 0)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {(showInvoiceForm || selectedInvoiceId || existingInvoices.length === 0) && (
-            <div className="flex gap-4">
-            <Button
-              type="submit"
-              loading={loading}
-              className="flex-1"
-              size="lg"
-            >
-              {loading ? 
-                (isNewInvoice ? 'Creating Invoice...' : 'Updating Invoice...') : 
-                (isNewInvoice ? 'Create Invoice' : 'Update Invoice')
-              }
-            </Button>
-            </div>
-          )}
-        </form>
+        {/* Instructions */}
+        {!isInvoiceCreated && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <h3 className="font-medium text-yellow-800 mb-2">Getting Started</h3>
+            <p className="text-sm text-yellow-700">
+              1. Fill in the invoice details above and click "Create Invoice"<br/>
+              2. Once created, you can add products to this specific invoice<br/>
+              3. Products will appear directly below the invoice details<br/>
+              4. Save your invoice when you're done adding products
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
