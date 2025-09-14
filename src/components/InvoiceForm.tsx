@@ -356,7 +356,7 @@ export const InvoiceForm: React.FC = () => {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-gray-900">Invoice Details</h2>
             {isInvoiceCreated && (
-              <Button onClick={handleSaveInvoice} loading={loading}>
+              <div>
                 {!isInvoiceSaved ? (
                   <Button
                     onClick={handleSaveInvoice}
@@ -373,80 +373,86 @@ export const InvoiceForm: React.FC = () => {
                     <p className="text-green-600 text-sm">This invoice is now read-only and cannot be modified.</p>
                   </div>
                 )}
-              <Input
-                label="Invoice ID"
-                value={invoice.invoice_id || ''}
-                onChange={(e) => handleInputChange('invoice_id', e.target.value)}
-                placeholder="INV-001"
-                error={errors.invoice_id}
-                disabled={isInvoiceCreated || isInvoiceSaved}
-              />
+              </div>
+            )}
+          </div>
 
-              <Input
-                label="Date"
-                type="date"
-                value={invoice.date || ''}
-                onChange={(e) => handleInputChange('date', e.target.value)}
-                error={errors.date}
-                disabled={isInvoiceSaved}
-              />
+          <form onSubmit={handleCreateInvoice} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Input
+              label="Invoice ID"
+              value={invoice.invoice_id || ''}
+              onChange={(e) => handleInputChange('invoice_id', e.target.value)}
+              placeholder="INV-001"
+              error={errors.invoice_id}
+              disabled={isInvoiceCreated || isInvoiceSaved}
+            />
 
-              <Select
-                label="Status"
-                value={invoice.status || ''}
-                onChange={(value) => handleInputChange('status', value)}
-                options={INVOICE_STATUS}
-                error={errors.status}
-                disabled={isInvoiceSaved}
-              />
+            <Input
+              label="Date"
+              type="date"
+              value={invoice.date || ''}
+              onChange={(e) => handleInputChange('date', e.target.value)}
+              error={errors.date}
+              disabled={isInvoiceSaved}
+            />
 
-              <Select
-                label="Payment Status"
-                value={invoice.payment_status || ''}
-                onChange={(value) => handleInputChange('payment_status', value)}
-                options={PAYMENT_STATUS}
-                error={errors.payment_status}
-                disabled={isInvoiceSaved}
-              />
+            <Select
+              label="Status"
+              value={invoice.status || ''}
+              onChange={(value) => handleInputChange('status', value)}
+              options={INVOICE_STATUS}
+              error={errors.status}
+              disabled={isInvoiceSaved}
+            />
 
-              <Select
-                label="State"
-                value={invoice.state || ''}
-                onChange={(value) => handleInputChange('state', value)}
-                options={INDIAN_STATES}
-                error={errors.state}
-                disabled={isInvoiceSaved}
-              />
+            <Select
+              label="Payment Status"
+              value={invoice.payment_status || ''}
+              onChange={(value) => handleInputChange('payment_status', value)}
+              options={PAYMENT_STATUS}
+              error={errors.payment_status}
+              disabled={isInvoiceSaved}
+            />
 
-              <Input
-                label="Amount Paid (₹)"
-                type="number"
-                value={invoice.amount_paid || ''}
-                onChange={(e) => handleInputChange('amount_paid', parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                disabled={isInvoiceSaved}
-              />
-            </div>
+            <Select
+              label="State"
+              value={invoice.state || ''}
+              onChange={(value) => handleInputChange('state', value)}
+              options={INDIAN_STATES}
+              error={errors.state}
+              disabled={isInvoiceSaved}
+            />
+
+            <Input
+              label="Amount Paid (₹)"
+              type="number"
+              value={invoice.amount_paid || ''}
+              onChange={(e) => handleInputChange('amount_paid', parseFloat(e.target.value) || 0)}
+              placeholder="0.00"
+              min="0"
+              step="0.01"
+              disabled={isInvoiceSaved}
+            />
 
             {/* Auto-filled fields */}
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">Auto-filled Information</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-blue-700">ITC Status:</span>
-                  <span className="ml-2 font-medium">{invoice.itc}</span>
-                </div>
-                <div>
-                  <span className="text-blue-700">Registered State:</span>
-                  <span className="ml-2 font-medium">{registration.state}</span>
+            <div className="col-span-full">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Auto-filled Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-700">ITC Status:</span>
+                    <span className="ml-2 font-medium">{invoice.itc}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Registered State:</span>
+                    <span className="ml-2 font-medium">{registration.state}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
             {!isInvoiceCreated && (
-              <div className="pt-4">
+              <div className="col-span-full pt-4">
                 <Button
                   type="submit"
                   loading={loading}
@@ -586,7 +592,7 @@ export const InvoiceForm: React.FC = () => {
               1. Fill in the invoice details above and click "Create Invoice"<br/>
               2. Once created, you can add products to this specific invoice<br/>
               3. Products will appear directly below the invoice details<br/>
-              4. Save your invoice when you're done adding products
+              4. Save your invoice when you're done adding products<br/>
               5. Once saved, the invoice becomes read-only and cannot be modified
             </p>
           </div>
