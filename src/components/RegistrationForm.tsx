@@ -5,6 +5,7 @@ import { Select } from './ui/Select';
 import { Button } from './ui/Button';
 import { INDIAN_STATES, VENDOR_TYPES, ITC_OPTIONS } from '../data/constants';
 import { GSTRegistration } from '../types';
+import { EmailService } from '../services/emailService';
 
 interface FormErrors {
   gstin?: string;
@@ -19,6 +20,8 @@ interface FormErrors {
 export const RegistrationForm: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [emailVerifying, setEmailVerifying] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [formData, setFormData] = useState<Partial<GSTRegistration>>({
     gstin: '',
     vendor_type: '',
@@ -37,6 +40,37 @@ export const RegistrationForm: React.FC = () => {
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  const handleEmailVerification = async () => {
+    if (!formData.email || !validateEmail(formData.email)) {
+      setErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+      return;
+    }
+
+    setEmailVerifying(true);
+    try {
+      const result = await EmailService.verifyEmail(formData.email);
+      
+      if (result.success && result.valid) {
+        setEmailVerified(true);
+        setErrors(prev => ({ ...prev, email: undefined }));
+      } else {
+        setErrors(prev => ({ 
+          ...prev, 
+          email: result.message || 'Email verification failed. Please check the email address.' 
+        }));
+        setEmailVerified(false);
+      }
+    } catch (error) {
+      setErrors(prev => ({ 
+        ...prev, 
+        email: 'Email verification service is currently unavailable. Please try again later.' 
+      }));
+      setEmailVerified(false);
+    } finally {
+      setEmailVerifying(false);
+    }
   };
 
   const validateForm = (): boolean => {
@@ -68,6 +102,10 @@ export const RegistrationForm: React.FC = () => {
 
     if (!formData.itc) {
       newErrors.itc = 'ITC option is required';
+    }
+
+    if (!emailVerified) {
+      newErrors.email = 'Please verify your email address';
     }
 
     setErrors(newErrors);
@@ -117,6 +155,11 @@ export const RegistrationForm: React.FC = () => {
       [field]: value
     }));
     
+    // Reset email verification when email changes
+    if (field === 'email') {
+      setEmailVerified(false);
+    }
+    
     // Clear error when user starts typing
     if (errors[field as keyof FormErrors]) {
       setErrors(prev => ({
@@ -163,6 +206,22 @@ export const RegistrationForm: React.FC = () => {
               placeholder="business@example.com"
               error={errors.email}
             />
+            
+            <div className="flex flex-col space-y-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleEmailVerification}
+                loading={emailVerifying}
+                disabled={!formData.email || emailVerified}
+                size="sm"
+              >
+                {emailVerifying ? 'Verifying...' : emailVerified ? 'Email Verified ✓' : 'Verify Email'}
+              </Button>
+              {emailVerified && (
+                <p className="text-sm text-green-600">✓ Email address verified successfully</p>
+              )}
+            </div>
 
             <Input
               label="Annual Turnover (₹)"

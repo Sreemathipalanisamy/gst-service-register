@@ -17,6 +17,7 @@ export const InvoiceForm: React.FC = () => {
   const [existingInvoices, setExistingInvoices] = useState<any[]>([]);
   const [currentInvoiceId, setCurrentInvoiceId] = useState<string>('');
   const [isInvoiceCreated, setIsInvoiceCreated] = useState(false);
+  const [isInvoiceSaved, setIsInvoiceSaved] = useState(false);
   const [registration, setRegistration] = useState<GSTRegistration | null>(null);
   
   const [invoice, setInvoice] = useState<Partial<Invoice>>({
@@ -75,6 +76,7 @@ export const InvoiceForm: React.FC = () => {
     setInvoice(selectedInvoice);
     setCurrentInvoiceId(selectedInvoice.invoice_id);
     setIsInvoiceCreated(true);
+    setIsInvoiceSaved(true); // Existing invoices are considered saved
     setShowExistingInvoices(false);
   };
 
@@ -98,6 +100,7 @@ export const InvoiceForm: React.FC = () => {
     });
     setCurrentInvoiceId('');
     setIsInvoiceCreated(false);
+    setIsInvoiceSaved(false);
     setShowExistingInvoices(false);
   };
 
@@ -117,8 +120,8 @@ export const InvoiceForm: React.FC = () => {
   }, [invoice.products, invoice.state, registration]);
 
   const handleAddProduct = (product: Product) => {
-    if (!isInvoiceCreated) {
-      alert('Please create/save the invoice first before adding products.');
+    if (!isInvoiceCreated || isInvoiceSaved) {
+      alert(isInvoiceSaved ? 'Cannot add products to a saved invoice.' : 'Please create the invoice first before adding products.');
       return;
     }
     
@@ -130,6 +133,11 @@ export const InvoiceForm: React.FC = () => {
   };
 
   const handleRemoveProduct = (index: number) => {
+    if (isInvoiceSaved) {
+      alert('Cannot remove products from a saved invoice.');
+      return;
+    }
+    
     setInvoice(prev => ({
       ...prev,
       products: prev.products?.filter((_, i) => i !== index) || []
@@ -172,6 +180,7 @@ export const InvoiceForm: React.FC = () => {
     try {
       setCurrentInvoiceId(invoice.invoice_id || '');
       setIsInvoiceCreated(true);
+      setIsInvoiceSaved(false); // New invoice is created but not saved yet
       alert('Invoice created successfully! You can now add products.');
     } catch (error) {
       console.error('Failed to create invoice:', error);
@@ -181,6 +190,11 @@ export const InvoiceForm: React.FC = () => {
   };
 
   const handleSaveInvoice = async () => {
+    if (isInvoiceSaved) {
+      alert('Invoice is already saved and cannot be modified.');
+      return;
+    }
+    
     setLoading(true);
     
     try {
@@ -208,6 +222,7 @@ export const InvoiceForm: React.FC = () => {
         alert('Invoice saved successfully!');
       }
       
+      setIsInvoiceSaved(true); // Mark invoice as saved
       localStorage.setItem('invoices', JSON.stringify(invoices));
       
       // Refresh existing invoices list
@@ -230,6 +245,11 @@ export const InvoiceForm: React.FC = () => {
   };
 
   const handleInputChange = (field: keyof Invoice, value: string | number) => {
+    if (isInvoiceSaved) {
+      alert('Cannot modify a saved invoice.');
+      return;
+    }
+    
     setInvoice(prev => ({
       ...prev,
       [field]: value
@@ -337,21 +357,29 @@ export const InvoiceForm: React.FC = () => {
             <h2 className="text-xl font-semibold text-gray-900">Invoice Details</h2>
             {isInvoiceCreated && (
               <Button onClick={handleSaveInvoice} loading={loading}>
-                <Save className="w-4 h-4 mr-2" />
-                Save Invoice
-              </Button>
-            )}
-          </div>
-          
-          <form onSubmit={handleCreateInvoice} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {!isInvoiceSaved ? (
+                  <Button
+                    onClick={handleSaveInvoice}
+                    loading={loading}
+                    className="w-full md:w-auto"
+                    size="lg"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Invoice
+                  </Button>
+                ) : (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <p className="text-green-800 font-medium">✓ Invoice saved successfully</p>
+                    <p className="text-green-600 text-sm">This invoice is now read-only and cannot be modified.</p>
+                  </div>
+                )}
               <Input
                 label="Invoice ID"
                 value={invoice.invoice_id || ''}
                 onChange={(e) => handleInputChange('invoice_id', e.target.value)}
                 placeholder="INV-001"
                 error={errors.invoice_id}
-                disabled={isInvoiceCreated}
+                disabled={isInvoiceCreated || isInvoiceSaved}
               />
 
               <Input
@@ -360,6 +388,7 @@ export const InvoiceForm: React.FC = () => {
                 value={invoice.date || ''}
                 onChange={(e) => handleInputChange('date', e.target.value)}
                 error={errors.date}
+                disabled={isInvoiceSaved}
               />
 
               <Select
@@ -368,6 +397,7 @@ export const InvoiceForm: React.FC = () => {
                 onChange={(value) => handleInputChange('status', value)}
                 options={INVOICE_STATUS}
                 error={errors.status}
+                disabled={isInvoiceSaved}
               />
 
               <Select
@@ -376,6 +406,7 @@ export const InvoiceForm: React.FC = () => {
                 onChange={(value) => handleInputChange('payment_status', value)}
                 options={PAYMENT_STATUS}
                 error={errors.payment_status}
+                disabled={isInvoiceSaved}
               />
 
               <Select
@@ -384,6 +415,7 @@ export const InvoiceForm: React.FC = () => {
                 onChange={(value) => handleInputChange('state', value)}
                 options={INDIAN_STATES}
                 error={errors.state}
+                disabled={isInvoiceSaved}
               />
 
               <Input
@@ -394,6 +426,7 @@ export const InvoiceForm: React.FC = () => {
                 placeholder="0.00"
                 min="0"
                 step="0.01"
+                disabled={isInvoiceSaved}
               />
             </div>
 
@@ -437,10 +470,10 @@ export const InvoiceForm: React.FC = () => {
               <Button
                 type="button"
                 onClick={() => setShowProductForm(true)}
-                disabled={showProductForm}
+                disabled={showProductForm || isInvoiceSaved}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Product
+                {isInvoiceSaved ? 'Invoice Saved (Read-only)' : 'Add Product'}
               </Button>
             </div>
 
@@ -469,6 +502,7 @@ export const InvoiceForm: React.FC = () => {
                         variant="danger"
                         size="sm"
                         onClick={() => handleRemoveProduct(index)}
+                        disabled={isInvoiceSaved}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -553,6 +587,16 @@ export const InvoiceForm: React.FC = () => {
               2. Once created, you can add products to this specific invoice<br/>
               3. Products will appear directly below the invoice details<br/>
               4. Save your invoice when you're done adding products
+              5. Once saved, the invoice becomes read-only and cannot be modified
+            </p>
+          </div>
+        )}
+        
+        {isInvoiceSaved && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-medium text-blue-800 mb-2">Invoice Status</h3>
+            <p className="text-sm text-blue-700">
+              This invoice has been saved and is now in read-only mode. No modifications can be made to the invoice details or products.
             </p>
           </div>
         )}
